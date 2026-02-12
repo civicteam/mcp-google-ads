@@ -359,15 +359,21 @@ The Google Ads MCP now supports environment file configuration for easier setup.
    ```
    # Authentication Type: "oauth" or "service_account"
    GOOGLE_ADS_AUTH_TYPE=oauth
-   
+
    # Path to your credentials file (OAuth client secret or service account key)
    GOOGLE_ADS_CREDENTIALS_PATH=/path/to/your/credentials.json
-   
+
    # Your Google Ads Developer Token
    GOOGLE_ADS_DEVELOPER_TOKEN=your_developer_token_here
-   
+
    # Optional: Manager Account ID (if applicable)
    GOOGLE_ADS_LOGIN_CUSTOMER_ID=your_manager_account_id
+
+   # Optional: Google Ads API version (defaults to v23)
+   # GOOGLE_ADS_API_VERSION=v23
+
+   # Optional: OAuth scopes, comma-separated (defaults to https://www.googleapis.com/auth/adwords)
+   # GOOGLE_ADS_SCOPES=https://www.googleapis.com/auth/adwords
    ```
 
 4. Save the file.
@@ -390,7 +396,9 @@ You can also set environment variables directly in your system or in the configu
         "GOOGLE_ADS_AUTH_TYPE": "oauth",
         "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/credentials.json",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE",
+        "GOOGLE_ADS_API_VERSION": "v23",
+        "GOOGLE_ADS_SCOPES": "https://www.googleapis.com/auth/adwords"
       }
     }
   }
@@ -409,7 +417,9 @@ You can also set environment variables directly in your system or in the configu
         "GOOGLE_ADS_AUTH_TYPE": "oauth",
         "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/credentials.json",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE",
+        "GOOGLE_ADS_API_VERSION": "v23",
+        "GOOGLE_ADS_SCOPES": "https://www.googleapis.com/auth/adwords"
       }
     }
   }
@@ -441,7 +451,9 @@ Add the following text (this tells Claude how to connect to Google Ads):
       "env": {
         "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/service_account_credentials.json",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE",
+        "GOOGLE_ADS_API_VERSION": "v23",
+        "GOOGLE_ADS_SCOPES": "https://www.googleapis.com/auth/adwords"
       }
     }
   }
@@ -453,8 +465,9 @@ Add the following text (this tells Claude how to connect to Google Ads):
 - The first path should point to the Python executable inside your virtual environment
 - The second path should point to the `google_ads_server.py` file inside the folder you unzipped
 - The third path should point to your Google service account credentials JSON file
-- Add your Google Ads Developer Token 
+- Add your Google Ads Developer Token
 - Add your Google Ads Manager Account ID (if applicable)
+- `GOOGLE_ADS_API_VERSION` and `GOOGLE_ADS_SCOPES` are optional and default to `v23` and `https://www.googleapis.com/auth/adwords` respectively
 
 Examples:
 
@@ -500,14 +513,16 @@ Cursor is an AI-powered code editor that can be enhanced with MCP tools. You can
          "env": {
            "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/service_account_credentials.json",
            "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
-           "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
+           "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE",
+           "GOOGLE_ADS_API_VERSION": "v23",
+           "GOOGLE_ADS_SCOPES": "https://www.googleapis.com/auth/adwords"
          }
        }
      }
    }
    ```
 
-   **Important:** Replace all paths and values with the actual information for your account, just like in the Claude Desktop configuration.
+   **Important:** Replace all paths and values with the actual information for your account, just like in the Claude Desktop configuration. `GOOGLE_ADS_API_VERSION` and `GOOGLE_ADS_SCOPES` are optional.
 
 4. Restart Cursor or reload the workspace to apply the new configuration.
 
