@@ -44,7 +44,7 @@ except ImportError:
 # Constants and configuration
 API_VERSION = os.environ.get("GOOGLE_ADS_API_VERSION", "v23")  # Google Ads API version
 SCOPES = os.environ.get("GOOGLE_ADS_SCOPES", "https://www.googleapis.com/auth/adwords").split(",")  # OAuth scopes
-REQUEST_TIMEOUT = 30  # Timeout in seconds for all HTTP requests
+REQUEST_TIMEOUT = int(os.environ.get("GOOGLE_ADS_REQUEST_TIMEOUT", "30"))  # Timeout in seconds for all HTTP requests
 MAX_IMAGE_DOWNLOAD_SIZE = 50 * 1024 * 1024  # 50 MB max for image downloads
 ALLOWED_IMAGE_DOWNLOAD_DOMAINS = {"googleusercontent.com", "google.com", "googleapis.com", "ggpht.com"}
 VALID_ASSET_TYPES = {"IMAGE", "TEXT", "VIDEO", "MEDIA_BUNDLE", "LEAD_FORM", "BOOK_ON_GOOGLE", "PROMOTION",
