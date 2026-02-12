@@ -195,9 +195,9 @@ def get_oauth_credentials():
     
     # If credentials don't exist or are invalid, get new ones
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+        if creds and (creds.expired or not creds.token) and creds.refresh_token:
             try:
-                logger.info("Refreshing expired token")
+                logger.info("Refreshing token (expired=%s, has_token=%s)", creds.expired, creds.token is not None)
                 creds.refresh(Request())
                 logger.info("Token successfully refreshed")
             except RefreshError as e:
@@ -260,9 +260,9 @@ def get_headers(creds):
     else:
         # For OAuth credentials, check if token needs refresh
         if not creds.valid:
-            if creds.expired and creds.refresh_token:
+            if (creds.expired or not creds.token) and creds.refresh_token:
                 try:
-                    logger.info("Refreshing expired OAuth token in get_headers")
+                    logger.info("Refreshing OAuth token in get_headers (expired=%s, has_token=%s)", creds.expired, creds.token is not None)
                     creds.refresh(Request())
                     logger.info("Token successfully refreshed in get_headers")
                 except RefreshError as e:
