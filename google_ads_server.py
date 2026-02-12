@@ -2,9 +2,11 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import Field
 import os
 import json
+import re
 import requests
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
@@ -42,6 +44,49 @@ except ImportError:
 # Constants and configuration
 API_VERSION = os.environ.get("GOOGLE_ADS_API_VERSION", "v23")  # Google Ads API version
 SCOPES = os.environ.get("GOOGLE_ADS_SCOPES", "https://www.googleapis.com/auth/adwords").split(",")  # OAuth scopes
+REQUEST_TIMEOUT = int(os.environ.get("GOOGLE_ADS_REQUEST_TIMEOUT", "30"))  # Timeout in seconds for all HTTP requests
+MAX_IMAGE_DOWNLOAD_SIZE = 50 * 1024 * 1024  # 50 MB max for image downloads
+ALLOWED_IMAGE_DOWNLOAD_DOMAINS = {"googleusercontent.com", "google.com", "googleapis.com", "ggpht.com"}
+VALID_ASSET_TYPES = {"IMAGE", "TEXT", "VIDEO", "MEDIA_BUNDLE", "LEAD_FORM", "BOOK_ON_GOOGLE", "PROMOTION",
+                     "CALLOUT", "STRUCTURED_SNIPPET", "SITELINK", "PAGE_FEED", "DYNAMIC_EDUCATION",
+                     "MOBILE_APP", "HOTEL_CALLOUT", "CALL", "PRICE", "CALL_TO_ACTION", "HOTEL_PROPERTY",
+                     "DISCOVERY_CAROUSEL_CARD", "DYNAMIC_REAL_ESTATE", "DYNAMIC_CUSTOM", "DYNAMIC_HOTEL",
+                     "DYNAMIC_FLIGHT", "DYNAMIC_TRAVEL", "DYNAMIC_LOCAL", "DYNAMIC_JOB", "LOCATION"}
+
+
+def _validate_asset_id(asset_id: str) -> str:
+    """Validate that asset_id contains only digits."""
+    cleaned = asset_id.strip()
+    if not cleaned.isdigit():
+        raise ValueError(f"Invalid asset_id: must contain only digits, got '{asset_id}'")
+    return cleaned
+
+
+def _validate_asset_type(asset_type: str) -> str:
+    """Validate asset_type against allowed values."""
+    cleaned = asset_type.strip().upper()
+    if cleaned not in VALID_ASSET_TYPES:
+        raise ValueError(f"Invalid asset_type: '{asset_type}'. Must be one of: {', '.join(sorted(VALID_ASSET_TYPES))}")
+    return cleaned
+
+
+def _validate_days(days: int) -> int:
+    """Validate that days is a positive integer within a reasonable range."""
+    if not isinstance(days, int) or days < 1 or days > 365:
+        raise ValueError(f"Invalid days value: {days}. Must be an integer between 1 and 365.")
+    return days
+
+
+def _is_trusted_image_url(url: str) -> bool:
+    """Check that a URL belongs to a trusted Google domain."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            return False
+        hostname = parsed.hostname or ""
+        return any(hostname == domain or hostname.endswith("." + domain) for domain in ALLOWED_IMAGE_DOWNLOAD_DOMAINS)
+    except Exception:
+        return False
 
 # Get credentials from environment variables
 GOOGLE_ADS_CREDENTIALS_PATH = os.environ.get("GOOGLE_ADS_CREDENTIALS_PATH")
@@ -258,8 +303,8 @@ async def list_accounts() -> str:
         headers = get_headers(creds)
         
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers:listAccessibleCustomers"
-        response = requests.get(url, headers=headers)
-        
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error accessing accounts: {response.text}"
         
@@ -308,17 +353,17 @@ async def execute_gaql_query(
         
         formatted_customer_id = format_customer_id(customer_id)
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
-        
+
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error executing query: {response.text}"
-        
+
         results = response.json()
         if not results.get('results'):
             return "No results found for the query."
-        
+
         # Format the results as a table
         result_lines = [f"Query Results for Account {formatted_customer_id}:"]
         result_lines.append("-" * 80)
@@ -382,6 +427,7 @@ async def get_campaign_performance(
         customer_id: "1234567890"
         days: 14
     """
+    days = _validate_days(days)
     query = f"""
         SELECT
             campaign.id,
@@ -397,7 +443,7 @@ async def get_campaign_performance(
         ORDER BY metrics.cost_micros DESC
         LIMIT 50
     """
-    
+
     return await execute_gaql_query(customer_id, query)
 
 @mcp.tool()
@@ -428,6 +474,7 @@ async def get_ad_performance(
         customer_id: "1234567890"
         days: 14
     """
+    days = _validate_days(days)
     query = f"""
         SELECT
             ad_group_ad.ad.id,
@@ -444,7 +491,7 @@ async def get_ad_performance(
         ORDER BY metrics.impressions DESC
         LIMIT 50
     """
-    
+
     return await execute_gaql_query(customer_id, query)
 
 @mcp.tool()
@@ -513,17 +560,17 @@ async def run_gaql(
         
         formatted_customer_id = format_customer_id(customer_id)
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
-        
+
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error executing query: {response.text}"
-        
+
         results = response.json()
         if not results.get('results'):
             return "No results found for the query."
-        
+
         if format.lower() == "json":
             return json.dumps(results, indent=2)
         
@@ -652,8 +699,8 @@ async def get_ad_creatives(
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
         
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error retrieving ad creatives: {response.text}"
         
@@ -747,8 +794,8 @@ async def get_account_currency(
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
         
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error retrieving account currency: {response.text}"
         
@@ -944,6 +991,7 @@ async def get_image_assets(
         customer_id: "1234567890"
         limit: 100
     """
+    limit = max(1, min(limit, 1000))
     query = f"""
         SELECT
             asset.id,
@@ -959,17 +1007,17 @@ async def get_image_assets(
             asset.type = 'IMAGE'
         LIMIT {limit}
     """
-    
+
     try:
         creds = get_credentials()
         headers = get_headers(creds)
-        
+
         formatted_customer_id = format_customer_id(customer_id)
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
-        
+
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error retrieving image assets: {response.text}"
         
@@ -1036,6 +1084,11 @@ async def download_image_asset(
         asset_id: "12345"
         output_dir: "./my_ad_images"
     """
+    try:
+        validated_asset_id = _validate_asset_id(asset_id)
+    except ValueError as e:
+        return str(e)
+
     query = f"""
         SELECT
             asset.id,
@@ -1045,20 +1098,20 @@ async def download_image_asset(
             asset
         WHERE
             asset.type = 'IMAGE'
-            AND asset.id = {asset_id}
+            AND asset.id = {validated_asset_id}
         LIMIT 1
     """
-    
+
     try:
         creds = get_credentials()
         headers = get_headers(creds)
-        
+
         formatted_customer_id = format_customer_id(customer_id)
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
-        
+
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error retrieving image asset: {response.text}"
         
@@ -1073,7 +1126,12 @@ async def download_image_asset(
         
         if not image_url:
             return f"No download URL found for image asset ID {asset_id}"
-        
+
+        # Validate the image URL is from a trusted Google domain
+        if not _is_trusted_image_url(image_url):
+            logger.warning(f"Blocked download from untrusted URL domain for asset {asset_id}")
+            return f"Image URL for asset {asset_id} is not from a trusted Google domain. Download blocked."
+
         # Validate and sanitize the output directory to prevent path traversal
         try:
             # Get the base directory (current working directory)
@@ -1096,19 +1154,29 @@ async def download_image_asset(
         except Exception as e:
             return f"Error creating output directory: {str(e)}"
         
-        # Download the image
-        image_response = requests.get(image_url)
+        # Download the image with timeout and size limit
+        image_response = requests.get(image_url, timeout=REQUEST_TIMEOUT, stream=True)
         if image_response.status_code != 200:
             return f"Failed to download image: HTTP {image_response.status_code}"
-        
+
+        # Read with size limit to prevent DoS
+        chunks = []
+        downloaded_size = 0
+        for chunk in image_response.iter_content(chunk_size=8192):
+            downloaded_size += len(chunk)
+            if downloaded_size > MAX_IMAGE_DOWNLOAD_SIZE:
+                return f"Image asset {asset_id} exceeds maximum download size ({MAX_IMAGE_DOWNLOAD_SIZE // (1024*1024)} MB). Download aborted."
+            chunks.append(chunk)
+
         # Clean the filename to be safe for filesystem
-        safe_name = ''.join(c for c in asset_name if c.isalnum() or c in ' ._-')
-        filename = f"{asset_id}_{safe_name}.jpg"
+        safe_name = ''.join(c for c in asset_name if c.isalnum() or c in '._-')
+        filename = f"{validated_asset_id}_{safe_name}.jpg"
         file_path = resolved_output_dir / filename
-        
+
         # Save the image
         with open(file_path, 'wb') as f:
-            f.write(image_response.content)
+            for chunk in chunks:
+                f.write(chunk)
         
         return f"Successfully downloaded image asset {asset_id} to {file_path}"
     
@@ -1145,6 +1213,17 @@ async def get_asset_usage(
         asset_id: "12345"
         asset_type: "IMAGE"
     """
+    # Validate inputs
+    try:
+        asset_type = _validate_asset_type(asset_type)
+    except ValueError as e:
+        return str(e)
+    if asset_id:
+        try:
+            asset_id = _validate_asset_id(asset_id)
+        except ValueError as e:
+            return str(e)
+
     # Build the query based on whether a specific asset ID was provided
     where_clause = f"asset.type = '{asset_type}'"
     if asset_id:
@@ -1203,19 +1282,19 @@ async def get_asset_usage(
         # First get the assets
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
         payload = {"query": assets_query}
-        assets_response = requests.post(url, headers=headers, json=payload)
-        
+        assets_response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if assets_response.status_code != 200:
             return f"Error retrieving assets: {assets_response.text}"
-        
+
         assets_results = assets_response.json()
         if not assets_results.get('results'):
             return f"No {asset_type} assets found for this customer ID."
-        
+
         # Now get the associations
         payload = {"query": associations_query}
-        assoc_response = requests.post(url, headers=headers, json=payload)
-        
+        assoc_response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if assoc_response.status_code != 200:
             return f"Error retrieving asset associations: {assoc_response.text}"
         
@@ -1313,8 +1392,9 @@ async def analyze_image_assets(
         customer_id: "1234567890"
         days: 14
     """
-    # Make sure to use a valid date range format
-    # Valid formats are: LAST_7_DAYS, LAST_14_DAYS, LAST_30_DAYS, etc. (with underscores)
+    days = _validate_days(days)
+
+    # Map to valid GAQL DURING date range format
     if days == 7:
         date_range = "LAST_7_DAYS"
     elif days == 14:
@@ -1322,9 +1402,8 @@ async def analyze_image_assets(
     elif days == 30:
         date_range = "LAST_30_DAYS"
     else:
-        # Default to 30 days if not a standard range
         date_range = "LAST_30_DAYS"
-        
+
     query = f"""
         SELECT
             asset.id,
@@ -1341,7 +1420,7 @@ async def analyze_image_assets(
             campaign_asset
         WHERE
             asset.type = 'IMAGE'
-            AND segments.date DURING LAST_30_DAYS
+            AND segments.date DURING {date_range}
         ORDER BY
             metrics.impressions DESC
         LIMIT 200
@@ -1353,10 +1432,10 @@ async def analyze_image_assets(
         
         formatted_customer_id = format_customer_id(customer_id)
         url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
-        
+
         payload = {"query": query}
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
         if response.status_code != 200:
             return f"Error analyzing image assets: {response.text}"
         
